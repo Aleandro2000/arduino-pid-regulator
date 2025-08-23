@@ -15,7 +15,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Fluxon',
+      title: 'HMI Application',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: ThemeColors.seedColor),
       ),
