@@ -1,7 +1,8 @@
-#include <dht.h>
-#include <SoftwareSerial.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <hd44780.h>
+#include <hd44780ioClass/hd44780_I2Cexp.h>
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
 #include <PID_v1_bc.h>
 
 #define MODULATION_RATE 9600
@@ -11,56 +12,99 @@
 #define MOTOR_PIN_IN2 A2
 #define MOTOR_PIN_EN A0
 
-dht DHT;
-SoftwareSerial BT(2, 3);
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+DHT dht(DHT_PIN, DHT11);
+
+hd44780_I2Cexp lcd(0x27, 16, 2);
 
 double tempSetpoint = 24.0;
-double inputVal, outputMotor;
+double humSetpoint = 50.0;
 
-PID motorPID(&inputVal, &outputMotor, &tempSetpoint, 2.0, 5.0, 1.0, DIRECT);
+double tempInput, tempOutput;
+double humInput, humOutput;
+double outputMotor;
+
+PID tempPID(&tempInput, &tempOutput, &tempSetpoint, 2.0, 5.0, 1.0, DIRECT);
+PID humPID(&humInput, &humOutput, &humSetpoint, 1.5, 4.0, 1.0, DIRECT);
 
 unsigned long lastUpdate = 0;
 unsigned long lastDHT = 0;
 
 void setup() {
   Serial.begin(MODULATION_RATE);
-  BT.begin(MODULATION_RATE);
+  Serial1.begin(MODULATION_RATE);
+
   pinMode(LED_PIN, OUTPUT);
   pinMode(MOTOR_PIN_IN1, OUTPUT);
   pinMode(MOTOR_PIN_IN2, OUTPUT);
   pinMode(MOTOR_PIN_EN, OUTPUT);
+
+  dht.begin();
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0);
   lcd.print("System Ready");
   delay(1000);
   lcd.clear();
-  motorPID.SetMode(AUTOMATIC);
-  motorPID.SetOutputLimits(0, 255);
+
+  tempPID.SetMode(AUTOMATIC);
+  tempPID.SetOutputLimits(0, 255);
+
+  humPID.SetMode(AUTOMATIC);
+  humPID.SetOutputLimits(0, 255);
 }
 
 void loop() {
-  if (BT.available()) {
-    char cmd = BT.read();
+  if (Serial1.available()) {
+    char cmd = Serial1.read();
     digitalWrite(LED_PIN, cmd == '1' ? HIGH : LOW);
     Serial.println(cmd == '1' ? "LED On" : "LED Off");
   }
+
   if (millis() - lastDHT > 1000) {
     lastDHT = millis();
-    if (DHT.read11(DHT_PIN) == DHTLIB_OK) {
-      inputVal = DHT.temperature;
-      motorPID.Compute();
+
+    double temp = dht.readTemperature();
+    double hum = dht.readHumidity();
+
+    if (!isnan(temp) && !isnan(hum)) {
+      tempInput = temp;
+      humInput = hum;
+
+      tempPID.Compute();
+      humPID.Compute();
+
+      outputMotor = max(tempOutput, humOutput);
+
       digitalWrite(MOTOR_PIN_IN1, HIGH);
       digitalWrite(MOTOR_PIN_IN2, LOW);
-      analogWrite(MOTOR_PIN_EN, (int)outputMotor);
+      analogWrite(MOTOR_PIN_EN, outputMotor);
+
+      Serial.print("{\"temperature\":");
+      Serial.print(temp, 2);
+      Serial.print(",\"humidity\":");
+      Serial.print(hum, 2);
+      Serial.print(",\"motorSpeed\":");
+      Serial.print(outputMotor, 0);
+      Serial.println("}");
+
+      Serial1.print("{\"temperature\":");
+      Serial1.print(temp, 2);
+      Serial1.print(",\"humidity\":");
+      Serial1.print(hum, 2);
+      Serial1.print(",\"motorSpeed\":");
+      Serial1.print(outputMotor, 0);
+      Serial1.println("}");
     }
   }
+
   if (millis() - lastUpdate > 100) {
     lastUpdate = millis();
-    BT.println("{\"temperature\":" + String(DHT.temperature, 2) + ",\"humidity\":" + String(DHT.humidity, 2) + ",\"motorSpeed\":" + String(outputMotor, 0) + "}");
+
+    float temp = dht.readTemperature();
+    float hum = dht.readHumidity();
+
     lcd.setCursor(0, 0);
-    lcd.print("T:" + String(DHT.temperature, 1) + "C H:" + String(DHT.humidity, 0) + "%   ");
+    lcd.print("T:" + String(temp, 1) + "C H:" + String(hum, 0) + "%   ");
     lcd.setCursor(0, 1);
     lcd.print("Motor:" + String(outputMotor, 0) + " SPD   ");
   }
