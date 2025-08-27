@@ -1,9 +1,9 @@
 #include <Wire.h>
-#include <hd44780.h>
-#include <hd44780ioClass/hd44780_I2Cexp.h>
+#include <LiquidCrystal_I2C.h>
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <PID_v1_bc.h>
+#include <SoftwareSerial.h>
 
 #define MODULATION_RATE 9600
 #define DHT_PIN 7
@@ -14,7 +14,9 @@
 
 DHT dht(DHT_PIN, DHT11);
 
-hd44780_I2Cexp lcd(0x27, 16, 2);
+SoftwareSerial bluetooth(2, 3);
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 double tempSetpoint = 24.0;
 double humSetpoint = 50.0;
@@ -31,7 +33,7 @@ unsigned long lastDHT = 0;
 
 void setup() {
   Serial.begin(MODULATION_RATE);
-  Serial1.begin(MODULATION_RATE);
+  bluetooth.begin(MODULATION_RATE);
 
   pinMode(LED_PIN, OUTPUT);
   pinMode(MOTOR_PIN_IN1, OUTPUT);
@@ -54,11 +56,7 @@ void setup() {
 }
 
 void loop() {
-  if (Serial1.available()) {
-    char cmd = Serial1.read();
-    digitalWrite(LED_PIN, cmd == '1' ? HIGH : LOW);
-    Serial.println(cmd == '1' ? "LED On" : "LED Off");
-  }
+  digitalWrite(LED_PIN, Serial.available() ? HIGH : LOW);
 
   if (millis() - lastDHT > 1000) {
     lastDHT = millis();
@@ -79,21 +77,16 @@ void loop() {
       digitalWrite(MOTOR_PIN_IN2, LOW);
       analogWrite(MOTOR_PIN_EN, outputMotor);
 
-      Serial.print("{\"temperature\":");
-      Serial.print(temp, 2);
-      Serial.print(",\"humidity\":");
-      Serial.print(hum, 2);
-      Serial.print(",\"motorSpeed\":");
-      Serial.print(outputMotor, 0);
-      Serial.println("}");
+      String data = "{\"temperature\":";
+      data += String(temp, 2);
+      data += ",\"humidity\":";
+      data += String(hum, 2);
+      data += ",\"motorSpeed\":";
+      data += String(outputMotor, 0);
+      data += "}";
 
-      Serial1.print("{\"temperature\":");
-      Serial1.print(temp, 2);
-      Serial1.print(",\"humidity\":");
-      Serial1.print(hum, 2);
-      Serial1.print(",\"motorSpeed\":");
-      Serial1.print(outputMotor, 0);
-      Serial1.println("}");
+      Serial.println(data);
+      bluetooth.println(data);
     }
   }
 
