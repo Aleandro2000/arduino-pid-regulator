@@ -4,6 +4,7 @@ A simple **PID (Proportional-Integral-Derivative)** controller on Arduino. It re
 
 ## Components
 - Arduino (Uno, Mega, Nano)
+- ESP32
 - Sensor (e.g., temperature, position)
 - Actuator (e.g., motor, heater)
 - Wires, breadboard
